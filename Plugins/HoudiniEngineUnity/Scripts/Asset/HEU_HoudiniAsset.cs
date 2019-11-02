@@ -2414,22 +2414,13 @@ namespace HoudiniEngineUnity
 
 		/// <summary>
 		/// Creates a prefab of this asset, without Houdini Engine data.
-		/// Returns reference to new prefab.
-		/// <param name="destinationPrefabPath">Opitional destination path to save prefab to (e.g. Assets/Prefabs)</param>
-		/// <returns>Reference to created prefab</returns>
 		/// </summary>
-		public GameObject BakeToNewPrefab(string destinationPrefabPath = null)
+		public void BakeToNewPrefab()
 		{
 			// This creates a temporary clone of the asset without the HDA data
 			// in the scene, then creates a prefab of the cloned object.
 
 			string bakedAssetPath = null;
-			if (!string.IsNullOrEmpty(destinationPrefabPath))
-			{
-				char[] trimChars = { '/', '\\' };
-				bakedAssetPath = destinationPrefabPath.TrimEnd(trimChars);
-			}
-			
 			bool bWriteMeshesToAssetDatabase = true;
 			bool bReconnectPrefabInstances = false;
 			GameObject newClonedRoot = CloneAssetWithoutHDA(ref bakedAssetPath, bWriteMeshesToAssetDatabase, bReconnectPrefabInstances);
@@ -2450,10 +2441,7 @@ namespace HoudiniEngineUnity
 						HEU_EditorUtility.SelectObject(prefabGO);
 
 						InvokeBakedEvent(true, new List<GameObject>() { prefabGO });
-
-						Debug.LogFormat("Exported prefab to {0}", bakedAssetPath);
 					}
-					return prefabGO;
 				}
 				finally
 				{
@@ -2461,14 +2449,12 @@ namespace HoudiniEngineUnity
 					HEU_GeneralUtility.DestroyImmediate(newClonedRoot);
 				}
 			}
-			return null;
 		}
 
 		/// <summary>
 		/// Create a copy of this asset, without Houdini Engine data.
-		/// Returns reference to newly created gameobject.
 		/// </summary>
-		public GameObject BakeToNewStandalone()
+		public void BakeToNewStandalone()
 		{
 			string bakedAssetPath = null;
 
@@ -2483,7 +2469,6 @@ namespace HoudiniEngineUnity
 
 				InvokeBakedEvent(true, new List<GameObject>() { newClonedRoot });
 			}
-			return newClonedRoot;
 		}
 
 		/// <summary>

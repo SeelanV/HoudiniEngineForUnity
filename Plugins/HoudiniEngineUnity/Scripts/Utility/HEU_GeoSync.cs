@@ -191,14 +191,7 @@ namespace HoudiniEngineUnity
 					generatedOutput._outputData._gameObject = newGameObject;
 
 					Terrain terrain = HEU_GeneralUtility.GetOrCreateComponent<Terrain>(newGameObject);
-
-#if !HEU_TERRAIN_COLLIDER_DISABLED
 					TerrainCollider collider = HEU_GeneralUtility.GetOrCreateComponent<TerrainCollider>(newGameObject);
-#endif
-
-					// TODO: Instead of writing the terrain data into the working folder, user might
-					// want to specify a path explictly. To support that, get terrain data path export 
-					// file via attribute. Then use CreateAsset to write to it.
 
 					if (!string.IsNullOrEmpty(terrainBuffers[t]._terrainDataPath))
 					{
@@ -221,16 +214,9 @@ namespace HoudiniEngineUnity
 					if (terrain.terrainData == null)
 					{
 						terrain.terrainData = new TerrainData();
-
-						string assetPathName = "TerrainData" + HEU_Defines.HEU_EXT_ASSET;
-						HEU_AssetDatabase.CreateObjectInAssetCacheFolder(terrain.terrainData, outputTerrainpath, null, assetPathName, typeof(TerrainData));
-
 					}
 					TerrainData terrainData = terrain.terrainData;
-
-#if !HEU_TERRAIN_COLLIDER_DISABLED
 					collider.terrainData = terrainData;
-#endif
 
 					HEU_TerrainUtility.SetTerrainMaterial(terrain, terrainBuffers[t]._specifiedTerrainMaterialName);
 
@@ -332,24 +318,15 @@ namespace HoudiniEngineUnity
 							{
 								// For existing TerrainLayer, make a copy of it if it has custom layer attributes
 								// because we don't want to change the original TerrainLayer.
-								if (layer._hasLayerAttributes)
+								if (layer._hasLayerAttributes && terrainLayerIndex >= 0)
 								{
 									// Copy the TerrainLayer file
 									TerrainLayer prevTerrainLayer = terrainlayer;
 									terrainlayer = HEU_AssetDatabase.CopyAndLoadAssetAtAnyPath(terrainlayer, outputTerrainpath, typeof(TerrainLayer), true) as TerrainLayer;
 									if (terrainlayer != null)
 									{
-										if (terrainLayerIndex >= 0)
-										{
-											// Update the TerrainLayer reference in the list with this copy
-											finalTerrainLayers[terrainLayerIndex] = terrainlayer;
-										}
-										else
-										{
-											// Newly added
-											terrainLayerIndex = finalTerrainLayers.Count;
-											finalTerrainLayers.Add(terrainlayer);
-										}
+										// Update the TerrainLayer reference in the list with this copy
+										finalTerrainLayers[terrainLayerIndex] = terrainlayer;
 
 										// Store path for clean up later
 										AddGeneratedOutputFilePath(HEU_AssetDatabase.GetAssetPath(terrainlayer));
@@ -362,13 +339,6 @@ namespace HoudiniEngineUnity
 										bSetTerrainLayerProperties = false;
 										// Again, continuing on to keep proper indexing.
 									}
-								}
-								else
-								{
-									// Could be a layer in Assets/ but not part of existing layers in TerrainData
-									terrainLayerIndex = finalTerrainLayers.Count;
-									finalTerrainLayers.Add(terrainlayer);
-									bSetTerrainLayerProperties = false;
 								}
 							}
 
@@ -527,13 +497,13 @@ namespace HoudiniEngineUnity
 					}
 					else
 					{
-						// Set return state to false if no mesh and no colliders (i.e. nothing is generated)
-						bResult = (meshBuffers[m]._geoCache._colliderInfos.Count > 0);
+						// Set return state to false if no mesh and not a collider type
+						bResult = (meshBuffers[m]._geoCache._colliderType != HEU_GenerateGeoCache.ColliderType.NONE);
 					}
 
 					if (bResult)
 					{
-						HEU_GenerateGeoCache.UpdateColliders(meshBuffers[m]._geoCache, generatedOutput._outputData);
+						HEU_GenerateGeoCache.UpdateCollider(meshBuffers[m]._geoCache, generatedOutput._outputData._gameObject);
 
 						meshBuffers[m]._generatedOutput = generatedOutput;
 						_generatedOutputs.Add(generatedOutput);
@@ -652,28 +622,6 @@ namespace HoudiniEngineUnity
 		private void GenerateInstancesFromNodeIDs(HEU_LoadBufferInstancer instancerBuffer, Dictionary<HAPI_NodeId, HEU_LoadBufferBase> idBuffersMap,
 			Transform instanceRootTransform)
 		{
-			// For single collision geo override
-			GameObject singleCollisionGO = null;
-
-			// For multi collision geo overrides, keep track of loaded objects
-			Dictionary<string, GameObject> loadedCollisionObjectMap = new Dictionary<string, GameObject>();
-
-			if (instancerBuffer._collisionAssetPaths != null && instancerBuffer._collisionAssetPaths.Length == 1)
-			{
-				// Single collision override
-				if (!string.IsNullOrEmpty(instancerBuffer._collisionAssetPaths[0]))
-				{
-					HEU_AssetDatabase.ImportAsset(instancerBuffer._collisionAssetPaths[0], HEU_AssetDatabase.HEU_ImportAssetOptions.Default);
-					singleCollisionGO = HEU_AssetDatabase.LoadAssetAtPath(instancerBuffer._collisionAssetPaths[0], typeof(GameObject)) as GameObject;
-				}
-
-				if (singleCollisionGO == null)
-				{
-					// Continue on but log error
-					Debug.LogErrorFormat("Collision asset at path {0} not found for instance {1}.", instancerBuffer._collisionAssetPaths[0], instancerBuffer._name);
-				}
-			}
-
 			int numInstances = instancerBuffer._instanceNodeIDs.Length;
 			for (int i = 0; i < numInstances; ++i)
 			{
@@ -701,53 +649,22 @@ namespace HoudiniEngineUnity
 					continue;
 				}
 
-				GameObject collisionSrcGO = null;
-				if (singleCollisionGO != null)
-				{
-					// Single collision geo
-					collisionSrcGO = singleCollisionGO;
-				}
-				else if (instancerBuffer._collisionAssetPaths != null
-					&& (i < instancerBuffer._collisionAssetPaths.Length)
-					&& !string.IsNullOrEmpty(instancerBuffer._collisionAssetPaths[i]))
-				{
-					// Mutliple collision geo (one per instance).
-					if (!loadedCollisionObjectMap.TryGetValue(instancerBuffer._collisionAssetPaths[i], out collisionSrcGO))
-					{
-						collisionSrcGO = HEU_AssetDatabase.LoadAssetAtPath(instancerBuffer._collisionAssetPaths[i], typeof(GameObject)) as GameObject;
-						if (collisionSrcGO == null)
-						{
-							Debug.LogErrorFormat("Unable to load collision asset at {0} for instancing!", instancerBuffer._collisionAssetPaths[i]);
-						}
-						else
-						{
-							loadedCollisionObjectMap.Add(instancerBuffer._collisionAssetPaths[i], collisionSrcGO);
-						}
-					}
-				}
-
 				int numTransforms = instancerBuffer._instanceTransforms.Length;
 				for (int j = 0; j < numTransforms; ++j)
 				{
 					CreateNewInstanceFromObject(sourceGameObject, (j + 1), instanceRootTransform, ref instancerBuffer._instanceTransforms[i],
-						instancerBuffer._instancePrefixes, instancerBuffer._name, collisionSrcGO);
+						instancerBuffer._instancePrefixes, instancerBuffer._name);
 				}
 			}
 		}
 
 		private void GenerateInstancesFromAssetPaths(HEU_LoadBufferInstancer instancerBuffer, Transform instanceRootTransform)
 	{
-			// For single asset, this is set when its imported
+			// For single asset, this is set when its impoted
 			GameObject singleAssetGO = null;
 
 			// For multi assets, keep track of loaded objects so we only need to load once for each object
-			Dictionary<string, GameObject> loadedAssetObjectMap = new Dictionary<string, GameObject>();
-
-			// For single collision geo override
-			GameObject singleCollisionGO = null;
-
-			// For multi collision geo overrides, keep track of loaded objects
-			Dictionary<string, GameObject> loadedCollisionObjectMap = new Dictionary<string, GameObject>();
+			Dictionary<string, GameObject> loadedUnityObjectMap = new Dictionary<string, GameObject>();
 
 			// Temporary empty gameobject in case the specified Unity asset is not found
 			GameObject tempGO = null;
@@ -768,22 +685,6 @@ namespace HoudiniEngineUnity
 				}
 			}
 
-			if (instancerBuffer._collisionAssetPaths != null && instancerBuffer._collisionAssetPaths.Length == 1)
-			{
-				// Single collision override
-				if (!string.IsNullOrEmpty(instancerBuffer._collisionAssetPaths[0]))
-				{
-					HEU_AssetDatabase.ImportAsset(instancerBuffer._collisionAssetPaths[0], HEU_AssetDatabase.HEU_ImportAssetOptions.Default);
-					singleCollisionGO = HEU_AssetDatabase.LoadAssetAtPath(instancerBuffer._collisionAssetPaths[0], typeof(GameObject)) as GameObject;
-				}
-
-				if (singleCollisionGO == null)
-				{
-					// Continue on but log error
-					Debug.LogErrorFormat("Collision asset at path {0} not found. Unable to create instances for {1}.", instancerBuffer._collisionAssetPaths[0], instancerBuffer._name);
-				}
-			}
-
 			int numInstancesCreated = 0;
 			int numInstances = instancerBuffer._instanceTransforms.Length;
 			for (int i = 0; i < numInstances; ++i)
@@ -791,8 +692,6 @@ namespace HoudiniEngineUnity
 				// Reset to the single asset for each instance allows which is null if using multi asset
 				// therefore forcing the instance asset to be found
 				GameObject unitySrcGO = singleAssetGO;
-
-				GameObject collisionSrcGO = null;
 
 				if (unitySrcGO == null)
 				{
@@ -803,9 +702,10 @@ namespace HoudiniEngineUnity
 						continue;
 					}
 
-					if (!loadedAssetObjectMap.TryGetValue(instancerBuffer._assetPaths[i], out unitySrcGO))
+					if (!loadedUnityObjectMap.TryGetValue(instancerBuffer._assetPaths[i], out unitySrcGO))
 					{
 						// Try loading it
+						//HEU_AssetDatabase.ImportAsset(instancerBuffer._assetPaths[i], HEU_AssetDatabase.HEU_ImportAssetOptions.Default);
 						unitySrcGO = HEU_AssetDatabase.LoadAssetAtPath(instancerBuffer._assetPaths[i], typeof(GameObject)) as GameObject;
 
 						if (unitySrcGO == null)
@@ -821,36 +721,12 @@ namespace HoudiniEngineUnity
 						}
 
 						// Adding to map even if not found so we don't flood the log with the same error message
-						loadedAssetObjectMap.Add(instancerBuffer._assetPaths[i], unitySrcGO);
-					}
-				}
-
-				if (singleCollisionGO != null)
-				{
-					// Single collision geo
-					collisionSrcGO = singleCollisionGO;
-				}
-				else if (instancerBuffer._collisionAssetPaths != null 
-					&& (i < instancerBuffer._collisionAssetPaths.Length)
-					&& !string.IsNullOrEmpty(instancerBuffer._collisionAssetPaths[i]))
-				{
-					// Mutliple collision geo (one per instance).
-					if (!loadedCollisionObjectMap.TryGetValue(instancerBuffer._collisionAssetPaths[i], out collisionSrcGO))
-					{
-						collisionSrcGO = HEU_AssetDatabase.LoadAssetAtPath(instancerBuffer._collisionAssetPaths[i], typeof(GameObject)) as GameObject;
-						if (collisionSrcGO == null)
-						{
-							Debug.LogErrorFormat("Unable to load collision asset at {0} for instancing!", instancerBuffer._collisionAssetPaths[i]);
-						}
-						else
-						{
-							loadedCollisionObjectMap.Add(instancerBuffer._collisionAssetPaths[i], collisionSrcGO);
-						}
+						loadedUnityObjectMap.Add(instancerBuffer._assetPaths[i], unitySrcGO);
 					}
 				}
 
 				CreateNewInstanceFromObject(unitySrcGO, (numInstancesCreated + 1), instanceRootTransform, ref instancerBuffer._instanceTransforms[i],
-					instancerBuffer._instancePrefixes, instancerBuffer._name, collisionSrcGO);
+					instancerBuffer._instancePrefixes, instancerBuffer._name);
 
 				numInstancesCreated++;
 			}
@@ -861,29 +737,24 @@ namespace HoudiniEngineUnity
 			}
 		}
 
-		private void CreateNewInstanceFromObject(GameObject assetSourceGO, int instanceIndex, Transform parentTransform, 
-			ref HAPI_Transform hapiTransform, string[] instancePrefixes, string instanceName, GameObject collisionSourceGO)
+		private void CreateNewInstanceFromObject(GameObject sourceObject, int instanceIndex, Transform parentTransform, 
+			ref HAPI_Transform hapiTransform, string[] instancePrefixes, string instanceName)
 		{
 			GameObject newInstanceGO = null;
 
-			if (HEU_EditorUtility.IsPrefabAsset(assetSourceGO))
+			if (HEU_EditorUtility.IsPrefabAsset(sourceObject))
 			{
-				newInstanceGO = HEU_EditorUtility.InstantiatePrefab(assetSourceGO) as GameObject;
+				newInstanceGO = HEU_EditorUtility.InstantiatePrefab(sourceObject) as GameObject;
 				newInstanceGO.transform.parent = parentTransform;
 			}
 			else
 			{
-				newInstanceGO = HEU_EditorUtility.InstantiateGameObject(assetSourceGO, parentTransform, false, false);
-			}
-
-			if (collisionSourceGO != null)
-			{
-				HEU_GeneralUtility.ReplaceColliderMeshFromMeshFilter(newInstanceGO, collisionSourceGO);
+				newInstanceGO = HEU_EditorUtility.InstantiateGameObject(sourceObject, parentTransform, false, false);
 			}
 
 			// To get the instance output name, we pass in the instance index. The actual name will be +1 from this.
 			newInstanceGO.name = HEU_GeometryUtility.GetInstanceOutputName(instanceName, instancePrefixes, instanceIndex);
-			newInstanceGO.isStatic = assetSourceGO.isStatic;
+			newInstanceGO.isStatic = sourceObject.isStatic;
 
 			Transform instanceTransform = newInstanceGO.transform;
 			HEU_HAPIUtility.ApplyLocalTransfromFromHoudiniToUnityForInstance(ref hapiTransform, instanceTransform);

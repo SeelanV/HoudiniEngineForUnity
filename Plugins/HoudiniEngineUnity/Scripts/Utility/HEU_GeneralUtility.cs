@@ -676,7 +676,7 @@ namespace HoudiniEngineUnity
 					int numObjects = gameObjects.Length;
 					for(int j = 0; j < numObjects; ++j)
 					{
-						Transform[] childTransforms = gameObjects[j].GetComponentsInChildren<Transform>(true);
+						Transform[] childTransforms = gameObjects[j].GetComponentsInChildren<Transform>();
 						foreach(Transform t in childTransforms)
 						{
 							if (t.gameObject.name.Equals(name))
@@ -748,11 +748,7 @@ namespace HoudiniEngineUnity
 			DestroyComponent<MeshFilter>(gameObject);
 			DestroyComponent<MeshRenderer>(gameObject);
 			DestroyComponent<Collider>(gameObject);
-
-#if !HEU_TERRAIN_COLLIDER_DISABLED
 			DestroyComponent<TerrainCollider>(gameObject);
-#endif
-
 			DestroyComponent<Terrain>(gameObject);
 			DestroyComponent<LODGroup>(gameObject);
 		}
@@ -789,9 +785,7 @@ namespace HoudiniEngineUnity
 				DestroyImmediate(terrain);
 			}
 
-#if !HEU_TERRAIN_COLLIDER_DISABLED
 			DestroyComponent<TerrainCollider>(gameObject);
-#endif
 		}
 
 		/// <summary>
@@ -889,7 +883,9 @@ namespace HoudiniEngineUnity
 				return;
 			}
 
-			// Removed the MeshCollider deletion here in favour of moving it into HEU_GeneratedOutputData.DestroyAllGeneratedColliders
+			// Delete the target mesh collider's mesh
+			// Do this before deleting the mesh below since its stored under the mesh's asset on file
+			DestroyMeshCollider(targetGO, bDontDeletePersistantResources);
 
 			// Delete the target mesh filter's mesh
 			MeshFilter targetMeshFilter = targetGO.GetComponent<MeshFilter>();
@@ -962,19 +958,23 @@ namespace HoudiniEngineUnity
 			HEU_AssetDatabase.DeleteAssetIfInBakedFolder(material);
 		}
 
-		public static void DestroyMeshCollider(MeshCollider meshCollider, bool bDontDeletePersistantResources)
+		public static void DestroyMeshCollider(GameObject gameObject, bool bDontDeletePersistantResources)
 		{
-			Mesh targetColliderMesh = meshCollider != null ? meshCollider.sharedMesh : null;
-			if (targetColliderMesh != null)
+			MeshCollider targetMeshCollider = gameObject != null ? gameObject.GetComponent<MeshCollider>() : null;
+			if (targetMeshCollider != null)
 			{
-				if (!bDontDeletePersistantResources || !HEU_EditorUtility.IsPersistant(targetColliderMesh))
+				Mesh targetColliderMesh = targetMeshCollider != null ? targetMeshCollider.sharedMesh : null;
+				if (targetColliderMesh != null)
 				{
-					// Need to call DestroyImmediate with bAllowDestroyingAssets to force deleting the asset file
-					DestroyImmediate(targetColliderMesh, bAllowDestroyingAssets: true);
-				}
+					if (!bDontDeletePersistantResources || !HEU_EditorUtility.IsPersistant(targetColliderMesh))
+					{
+						// Need to call DestroyImmediate with bAllowDestroyingAssets to force deleting the asset file
+						DestroyImmediate(targetColliderMesh, bAllowDestroyingAssets: true);
+					}
 
-				targetColliderMesh = null;
-				meshCollider.sharedMesh = null;
+					targetColliderMesh = null;
+					targetMeshCollider.sharedMesh = null;
+				}
 			}
 		}
 
@@ -1680,60 +1680,6 @@ namespace HoudiniEngineUnity
 			}
 
 			return materialName;
-		}
-
-		/// <summary>
-		/// Replace the targetGO's Collider component's mesh with mesh from
-		/// sourceColliderGO's mesh.
-		/// If targetGO has a MeshCollider, its mesh will be replaced but the component kept.
-		/// If targetGO has any other collider, it will be destroyed and new MeshCollider added.
-		/// If targetGO has no other collider, a new MeshCollider will be added.
-		/// </summary>
-		/// <param name="targetGO">The gameobject to replace the collider mesh for.</param>
-		/// <param name="sourceColliderGO">The gameobject containing MeshFilter with mesh to use.</param>
-		public static void ReplaceColliderMeshFromMeshFilter(GameObject targetGO, GameObject sourceColliderGO)
-		{
-			MeshFilter srcMeshFilter = sourceColliderGO.GetComponent<MeshFilter>();
-			if (srcMeshFilter != null)
-			{
-				// Either replace existing MeshCollider's mesh, or remove other colliders, 
-				// and add new MeshCollider with source mesh.
-				MeshCollider meshCollider = targetGO.GetComponent<MeshCollider>();
-				if (meshCollider == null)
-				{
-					HEU_GeneralUtility.DestroyComponent<Collider>(targetGO);
-					meshCollider = targetGO.AddComponent<MeshCollider>();
-				}
-
-				meshCollider.sharedMesh = srcMeshFilter.sharedMesh;
-			}
-		}
-
-		/// <summary>
-		/// Replace the targetGO's Collider component's mesh with mesh from
-		/// sourceColliderGO's MeshCollider mesh.
-		/// If targetGO has a MeshCollider, its mesh will be replaced but the component kept.
-		/// If targetGO has any other collider, it will be destroyed and new MeshCollider added.
-		/// If targetGO has no other collider, a new MeshCollider will be added.
-		/// </summary>
-		/// <param name="targetGO">The gameobject to replace the collider mesh for.</param>
-		/// <param name="sourceColliderGO">The gameobject containing MeshCollider with mesh to use.</param>
-		public static void ReplaceColliderMeshFromMeshCollider(GameObject targetGO, GameObject sourceColliderGO)
-		{
-			MeshCollider srcMeshCollider = sourceColliderGO.GetComponent<MeshCollider>();
-			if (srcMeshCollider != null)
-			{
-				// Either replace existing MeshCollider's mesh, or remove other colliders, 
-				// and add new MeshCollider with source mesh.
-				MeshCollider meshCollider = targetGO.GetComponent<MeshCollider>();
-				if (meshCollider == null)
-				{
-					HEU_GeneralUtility.DestroyComponent<Collider>(targetGO);
-					meshCollider = targetGO.AddComponent<MeshCollider>();
-				}
-
-				meshCollider.sharedMesh = srcMeshCollider.sharedMesh;
-			}
 		}
 	}
 

@@ -188,8 +188,6 @@ namespace HoudiniEngineUnity
 		public const string DEFAULT_COLLISION_GEO = "collision_geo";
 		public const string DEFAULT_RENDERED_COLLISION_GEO = "rendered_collision_geo";
 		public const string DEFAULT_CONVEX_COLLISION_GEO = "convex";
-		public const string DEFAULT_SIMPLE_COLLISION_GEO = "collision_geo_simple";
-		public const string DEFAULT_SIMPLE_RENDERED_COLLISION_GEO = "rendered_collision_geo_simple";
 
 		// Materials
 		public const string DEFAULT_UNITY_MATERIAL_ATTR = "unity_material";
@@ -209,9 +207,6 @@ namespace HoudiniEngineUnity
 
 		public const string DEFAULT_UNITY_HEIGHTFIELD_TERRAINDATA_FILE_ATTR = "unity_hf_terraindata_file";
 		public const string DEFAULT_UNITY_HEIGHTFIELD_TERRAINLAYER_FILE_ATTR = "unity_hf_terrainlayer_file";
-		public const string DEFAULT_UNITY_HEIGHTFIELD_TERRAINDATA_EXPORT_PATH = "unity_hf_terraindata_export_path";
-		public const string DEFAULT_UNITY_HEIGHTFIELD_HEIGHT_RANGE = "unity_hf_height_range";
-		public const string DEFAULT_UNITY_HEIGHTFIELD_YPOS = "unity_hf_ypos";
 
 		public const string HEIGHTFIELD_TREEPROTOTYPE = "unity_hf_tree_prototype";
 

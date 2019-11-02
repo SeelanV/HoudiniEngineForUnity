@@ -72,9 +72,6 @@ namespace HoudiniEngineUnity
 
 			// Need to wrap up the gradient in order to figure out what had changed in the gradient window
 			public SerializedObject _gradientSerializedObject;
-
-			// List of objects for string-based asset paths
-			public List<UnityEngine.Object> _assetObjects;
 		}
 		private List<HEU_ParameterUICache> _parameterCache;
 
@@ -419,25 +416,7 @@ namespace HoudiniEngineUnity
 			{
 				paramUICache._primaryValue = parameterProperty.FindPropertyRelative("_stringValues");
 
-				if (parameterData.IsAssetPath())
-				{
-					// For asset paths, load and cache the assets if we have valid paths.
-					int numItems = paramUICache._primaryValue.arraySize;
-					paramUICache._assetObjects = new List<Object>(numItems);
-					for(int i = 0; i < numItems; ++i)
-					{
-						SerializedProperty parmProperty = paramUICache._primaryValue.GetArrayElementAtIndex(i);
-						if (!string.IsNullOrEmpty(parmProperty.stringValue))
-						{
-							paramUICache._assetObjects.Add(HEU_AssetDatabase.LoadAssetAtPath(parmProperty.stringValue, typeof(UnityEngine.Object)));
-						}
-						else
-						{
-							paramUICache._assetObjects.Add(null);
-						}
-					}
-				}
-				else if (parameterData._parmInfo.choiceCount > 0)
+				if (parameterData._parmInfo.choiceCount > 0)
 				{
 					paramUICache._secondaryValue = parameterProperty.FindPropertyRelative("_choiceValue");
 				}
@@ -499,15 +478,21 @@ namespace HoudiniEngineUnity
 			}
 		}
 
-		private void DrawArrayPropertyStringPath(string labelString, SerializedProperty arrayProperty, List<UnityEngine.Object> assetObjects)
+		/// <summary>
+		/// Draws array properties in the Inspector UI with proper rows and columns.
+		/// Uses delayed draws to reduce cooking on each character change in a field.
+		/// </summary>
+		/// <param name="labelString"></param>
+		/// <param name="arrayProperty"></param>
+		private void DrawArrayProperty(string labelString, SerializedProperty arrayProperty)
 		{
-			// Arrays are drawn with a label, and rows of object paths.
+			// Arrays are drawn with a label, and rows of values.
 
-			using (new EditorGUILayout.HorizontalScope())
+			GUILayout.BeginHorizontal();
 			{
 				EditorGUILayout.PrefixLabel(labelString);
 
-				using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+				GUILayout.BeginVertical(EditorStyles.helpBox);
 				{
 					int numElements = arrayProperty.arraySize;
 					int maxElementsPerRow = 4;
@@ -522,119 +507,31 @@ namespace HoudiniEngineUnity
 								GUILayout.BeginHorizontal();
 							}
 
-							UnityEngine.Object newAssetObject = null;
-							if (i < assetObjects.Count)
+							switch (arrayProperty.GetArrayElementAtIndex(0).propertyType)
 							{
-								newAssetObject = EditorGUILayout.ObjectField(assetObjects[i], typeof(UnityEngine.Object), false);
-								if (newAssetObject != assetObjects[i])
+								case SerializedPropertyType.Integer:
 								{
-									// Since its just a string parm, we only need to store the path to asset
-									arrayProperty.GetArrayElementAtIndex(i).stringValue = HEU_AssetDatabase.GetAssetPath(newAssetObject);
-									assetObjects[i] = newAssetObject;
+									EditorGUILayout.DelayedIntField(arrayProperty.GetArrayElementAtIndex(i), GUIContent.none);
+									break;
+								}
+								case SerializedPropertyType.Float:
+								{
+									EditorGUILayout.DelayedFloatField(arrayProperty.GetArrayElementAtIndex(i), GUIContent.none);
+									break;
+								}
+								case SerializedPropertyType.String:
+								{
+									EditorGUILayout.DelayedTextField(arrayProperty.GetArrayElementAtIndex(i), GUIContent.none);
+									break;
 								}
 							}
-							else
-							{
-								arrayProperty.GetArrayElementAtIndex(i).stringValue = null;
-							}
 						}
 					}
 					GUILayout.EndHorizontal();
 				}
+				GUILayout.EndVertical();
 			}
-		}
-
-		private void DrawArrayPropertyString(string labelString, SerializedProperty arrayProperty)
-		{
-			// Arrays are drawn with a label, and rows of values.
-
-			using (new EditorGUILayout.HorizontalScope())
-			{
-				EditorGUILayout.PrefixLabel(labelString);
-
-				using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
-				{
-					int numElements = arrayProperty.arraySize;
-					int maxElementsPerRow = 4;
-
-					GUILayout.BeginHorizontal();
-					{
-						for (int i = 0; i < numElements; ++i)
-						{
-							if (i > 0 && i % maxElementsPerRow == 0)
-							{
-								GUILayout.EndHorizontal();
-								GUILayout.BeginHorizontal();
-							}
-
-							EditorGUILayout.DelayedTextField(arrayProperty.GetArrayElementAtIndex(i), GUIContent.none);
-						}
-					}
-					GUILayout.EndHorizontal();
-				}
-			}
-		}
-
-		private void DrawArrayPropertyInt(string labelString, SerializedProperty arrayProperty)
-		{
-			// Arrays are drawn with a label, and rows of values.
-
-			using (new EditorGUILayout.HorizontalScope())
-			{
-				EditorGUILayout.PrefixLabel(labelString);
-
-				using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
-				{
-					int numElements = arrayProperty.arraySize;
-					int maxElementsPerRow = 4;
-
-					GUILayout.BeginHorizontal();
-					{
-						for (int i = 0; i < numElements; ++i)
-						{
-							if (i > 0 && i % maxElementsPerRow == 0)
-							{
-								GUILayout.EndHorizontal();
-								GUILayout.BeginHorizontal();
-							}
-
-							EditorGUILayout.DelayedIntField(arrayProperty.GetArrayElementAtIndex(i), GUIContent.none);
-						}
-					}
-					GUILayout.EndHorizontal();
-				}
-			}
-		}
-
-		private void DrawArrayPropertyFloat(string labelString, SerializedProperty arrayProperty)
-		{
-			// Arrays are drawn with a label, and rows of values.
-
-			using (new EditorGUILayout.HorizontalScope())
-			{
-				EditorGUILayout.PrefixLabel(labelString);
-
-				using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
-				{
-					int numElements = arrayProperty.arraySize;
-					int maxElementsPerRow = 4;
-
-					GUILayout.BeginHorizontal();
-					{
-						for (int i = 0; i < numElements; ++i)
-						{
-							if (i > 0 && i % maxElementsPerRow == 0)
-							{
-								GUILayout.EndHorizontal();
-								GUILayout.BeginHorizontal();
-							}
-
-							EditorGUILayout.DelayedFloatField(arrayProperty.GetArrayElementAtIndex(i), GUIContent.none);
-						}
-					}
-					GUILayout.EndHorizontal();
-				}
-			}
+			GUILayout.EndHorizontal();
 		}
 
 		private void DrawContainerParamUICache(HEU_ParameterUICache paramUICache, bool bDrawFoldout = true)
@@ -751,7 +648,7 @@ namespace HoudiniEngineUnity
 					{
 						// Multiple ints. Display label, then each element.
 
-						DrawArrayPropertyInt(parameterData._labelName, intsProperty);
+						DrawArrayProperty(parameterData._labelName, intsProperty);
 					}
 				}
 			}
@@ -791,7 +688,7 @@ namespace HoudiniEngineUnity
 				{
 					// Multiple floats. Display label, then each element.
 
-					DrawArrayPropertyFloat(parameterData._labelName, floatsProperty);
+					DrawArrayProperty(parameterData._labelName, floatsProperty);
 				}
 
 			}
@@ -812,14 +709,10 @@ namespace HoudiniEngineUnity
 					// choiceProperty.intValue now holds the user's choice, so just update it
 					stringsProperty.GetArrayElementAtIndex(0).stringValue = parameterData._choiceStringValues[choiceProperty.intValue];
 				}
-				else if(parameterData.IsAssetPath())
-				{
-					DrawArrayPropertyStringPath(parameterData._labelName, stringsProperty, paramUICache._assetObjects);
-				}
 				else
 				{
-					// Draw strings as list or singularly, or as asset path
-					DrawArrayPropertyString(parameterData._labelName, stringsProperty);
+					// Draw strings as list or singularly
+					DrawArrayProperty(parameterData._labelName, stringsProperty);
 				}
 			}
 			else if (parmType == HAPI_ParmType.HAPI_PARMTYPE_TOGGLE)

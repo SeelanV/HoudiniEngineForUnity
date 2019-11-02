@@ -30,7 +30,6 @@
 
 using System.Collections;
 using System.Collections.Generic;
-using System.Text;
 using UnityEngine;
 
 #if UNITY_EDITOR
@@ -123,7 +122,7 @@ namespace HoudiniEngineUnity
 		private void UpdatePDGContext()
 		{
 #if HOUDINIENGINEUNITY_ENABLED
-			HEU_SessionBase session = GetHAPIPDGSession(false);
+			HEU_SessionBase session = GetHAPIPDGSession();
 			if (session == null || !session.IsSessionValid())
 			{
 				return;
@@ -182,7 +181,7 @@ namespace HoudiniEngineUnity
 		public void ReinitializePDGContext()
 		{
 #if HOUDINIENGINEUNITY_ENABLED
-			HEU_SessionBase session = GetHAPIPDGSession(false);
+			HEU_SessionBase session = GetHAPIPDGSession();
 			if (session == null || !session.IsSessionValid())
 			{
 				_pdgContextIDs = null;
@@ -192,7 +191,7 @@ namespace HoudiniEngineUnity
 			int numContexts = 0;
 			HAPI_StringHandle[] contextNames = new HAPI_StringHandle[_pdgContextSize];
 			HAPI_PDG_GraphContextId[] contextIDs = new HAPI_PDG_GraphContextId[_pdgContextSize];
-			if (!session.GetPDGGraphContexts(out numContexts, contextNames, contextIDs, _pdgContextSize, false) || numContexts <= 0)
+			if (!session.GetPDGGraphContexts(out numContexts, contextNames, contextIDs, _pdgContextSize) || numContexts <= 0)
 			{
 				_pdgContextIDs = null;
 				return;
@@ -207,8 +206,7 @@ namespace HoudiniEngineUnity
 			for (int i = 0; i < numContexts; ++i)
 			{
 				_pdgContextIDs[i] = contextIDs[i];
-				//string cname = HEU_SessionManager.GetString(contextNames[i], session);
-				//Debug.LogFormat("PDG Context: {0} - {1}", HEU_SessionManager.GetString(cname, session), contextIDs[i]);
+				//Debug.LogFormat("PDG Context: {0} - {1}", HEU_SessionManager.GetString(contextNames[i], session), contextIDs[i]);
 			}
 #endif
 		}
@@ -240,8 +238,6 @@ namespace HoudiniEngineUnity
 				return;
 			}
 
-			EventMessageColor msgColor = EventMessageColor.DEFAULT;
-
 			// Events can be split into TOP node specific or work item specific
 
 			if (evType == HAPI_PDG_EventType.HAPI_PDG_EVENT_NULL)
@@ -265,11 +261,10 @@ namespace HoudiniEngineUnity
 			else if (evType == HAPI_PDG_EventType.HAPI_PDG_EVENT_COOK_ERROR)
 			{
 				SetTOPNodePDGState(assetLink, topNode, HEU_TOPNodeData.PDGState.COOK_FAILED);
-				msgColor = EventMessageColor.ERROR;
 			}
 			else if (evType == HAPI_PDG_EventType.HAPI_PDG_EVENT_COOK_WARNING)
 			{
-				msgColor = EventMessageColor.WARNING;
+
 			}
 			else if (evType == HAPI_PDG_EventType.HAPI_PDG_EVENT_COOK_COMPLETE)
 			{
@@ -360,7 +355,6 @@ namespace HoudiniEngineUnity
 					{
 						// TODO: on cook failure, get log path?
 						NotifyTOPNodeErrorWorkItem(assetLink, topNode);
-						msgColor = EventMessageColor.ERROR;
 					}
 					else if(currentState == HAPI_PDG_WorkitemState.HAPI_PDG_WORKITEM_COOKED_CANCEL)
 					{
@@ -385,19 +379,6 @@ namespace HoudiniEngineUnity
 				else if(topNode.AnyWorkItemsPending())
 				{
 					SetTOPNodePDGState(assetLink, topNode, HEU_TOPNodeData.PDGState.COOKING);
-				}
-			}
-
-			if (eventInfo.msgSH >= 0)
-			{
-				string eventMsg = HEU_SessionManager.GetString(eventInfo.msgSH, session);
-				if (!string.IsNullOrEmpty(eventMsg))
-				{
-					AddEventMessage(string.Format("<color={0}>{1} - {2}: {3}</color>\n",
-						_eventMessageColorCode[(int)msgColor],
-						evType,
-						topNode._nodeName,
-						eventMsg));
 				}
 			}
 #endif
@@ -509,16 +490,9 @@ namespace HoudiniEngineUnity
 		/// Return the current Houdini Engine session
 		/// </summary>
 		/// <returns></returns>
-		public HEU_SessionBase GetHAPIPDGSession(bool bCreate = true)
+		public HEU_SessionBase GetHAPIPDGSession()
 		{
-			if (bCreate)
-			{
-				return HEU_SessionManager.GetOrCreateDefaultSession();
-			}
-			else
-			{
-				return HEU_SessionManager.GetDefaultSession();
-			}
+			return HEU_SessionManager.GetOrCreateDefaultSession();
 		}
 
 		/// <summary>
@@ -528,8 +502,6 @@ namespace HoudiniEngineUnity
 		public void CookTOPNetworkOutputNode(HEU_TOPNetworkData topNetwork)
 		{
 #if HOUDINIENGINEUNITY_ENABLED
-			ClearEventMessages();
-
 			HEU_SessionBase session = GetHAPIPDGSession();
 			if (session == null || !session.IsSessionValid())
 			{
@@ -626,8 +598,6 @@ namespace HoudiniEngineUnity
 		public bool DirtyTOPNode(HAPI_NodeId nodeID)
 		{
 #if HOUDINIENGINEUNITY_ENABLED
-			ClearEventMessages();
-
 			HEU_SessionBase session = GetHAPIPDGSession();
 			if (session != null && session.IsSessionValid())
 			{
@@ -644,8 +614,6 @@ namespace HoudiniEngineUnity
 		public bool CookTOPNode(HAPI_NodeId nodeID)
 		{
 #if HOUDINIENGINEUNITY_ENABLED
-			ClearEventMessages();
-
 			HEU_SessionBase session = GetHAPIPDGSession();
 			if (session != null && session.IsSessionValid())
 			{
@@ -661,8 +629,6 @@ namespace HoudiniEngineUnity
 		public bool DirtyAll(HAPI_NodeId nodeID)
 		{
 #if HOUDINIENGINEUNITY_ENABLED
-			ClearEventMessages();
-
 			HEU_SessionBase session = GetHAPIPDGSession();
 			if (session != null && session.IsSessionValid())
 			{
@@ -672,21 +638,6 @@ namespace HoudiniEngineUnity
 			return false;
 		}
 
-		public void AddEventMessage(string msg)
-		{
-			_pdgEventMessages.AppendLine(msg);
-		}
-
-		public string GetEventMessages()
-		{
-			return _pdgEventMessages.ToString();
-		}
-
-		public void ClearEventMessages()
-		{
-			// .Net 3.5 and lower does not have StringBuilder.clear()
-			_pdgEventMessages.Length = 0;
-		}
 
 		//	DATA ------------------------------------------------------------------------------------------------------
 
@@ -709,24 +660,6 @@ namespace HoudiniEngineUnity
 		public string _errorMsg;
 
 		public HAPI_PDG_State _pdgState = HAPI_PDG_State.HAPI_PDG_STATE_READY;
-
-		// PDG event messages generated during cook
-		[SerializeField]
-		private StringBuilder _pdgEventMessages = new StringBuilder();
-
-		private enum EventMessageColor
-		{
-			DEFAULT,
-			WARNING,
-			ERROR
-		}
-
-		private string[] _eventMessageColorCode =
-		{
-			"#c0c0c0ff",
-			"#ffa500ff",
-			"#ff0000ff"
-		};
 	}
 
 

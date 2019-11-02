@@ -327,34 +327,27 @@ namespace HoudiniEngineUnity
 					// Preliminary check for attribute instancing (mesh type with no verts but has points with instances)
 					if (HEU_HAPIUtility.IsSupportedPolygonType(partInfo.type) && partInfo.vertexCount == 0 && partInfo.pointCount > 0)
 					{
-						// Allowing both types of instancing
-
 						if (HEU_GeneralUtility.HasValidInstanceAttribute(_session, nodeID, partInfo.id, HEU_PluginSettings.UnityInstanceAttr))
 						{
 							isAttribInstancer = true;
 						}
-
-						if (HEU_GeneralUtility.HasValidInstanceAttribute(_session, nodeID, partInfo.id, HEU_Defines.HEIGHTFIELD_TREEINSTANCE_PROTOTYPEINDEX))
+						else if (HEU_GeneralUtility.HasValidInstanceAttribute(_session, nodeID, partInfo.id, HEU_Defines.HEIGHTFIELD_TREEINSTANCE_PROTOTYPEINDEX))
 						{
 							isScatterInstancer = true;
 						}
 					}
 
-					if (isScatterInstancer || isAttribInstancer || partInfo.type == HAPI_PartType.HAPI_PARTTYPE_INSTANCER)
+					if (isScatterInstancer)
 					{
-						if (isScatterInstancer)
-						{
-							scatterInstancerParts.Add(partInfo);
-						}
-
-						if (partInfo.type == HAPI_PartType.HAPI_PARTTYPE_INSTANCER || isAttribInstancer)
-						{
-							instancerParts.Add(partInfo);
-						}
+						scatterInstancerParts.Add(partInfo);
 					}
 					else if (partInfo.type == HAPI_PartType.HAPI_PARTTYPE_VOLUME)
 					{
 						volumeParts.Add(partInfo);
+					}
+					else if (partInfo.type == HAPI_PartType.HAPI_PARTTYPE_INSTANCER || isAttribInstancer)
+					{
+						instancerParts.Add(partInfo);
 					}
 					else if (partInfo.type == HAPI_PartType.HAPI_PARTTYPE_CURVE)
 					{
@@ -470,8 +463,7 @@ namespace HoudiniEngineUnity
 					// Get the height values from Houdini along with the min and max height range.
 					layer._normalizedHeights = HEU_TerrainUtility.GetNormalizedHeightmapFromPartWithMinMax(
 						_session, nodeID, volumeParts[i].id, volumeInfo.xLength, volumeInfo.yLength,
-						ref layer._minHeight, ref layer._maxHeight, ref layer._heightRange,
-						(layerType == HFLayerType.HEIGHT));
+						ref layer._minHeight, ref layer._maxHeight, ref layer._heightRange);
 				}
 
 				// Get the tile index, if it exists, for this part
@@ -516,18 +508,7 @@ namespace HoudiniEngineUnity
 						volumeBuffer._heightMapHeight = layer._heightMapHeight;
 						volumeBuffer._terrainSizeX = layer._terrainSizeX;
 						volumeBuffer._terrainSizeY = layer._terrainSizeY;
-						volumeBuffer._heightRange = layer._heightRange;
-
-						// The terrain heightfield position in y requires offset of min height
-						layer._position.y += layer._minHeight;
-
-						// Use y position from attribute if user has set it
-						float userYPos;
-						if (HEU_GeneralUtility.GetAttributeFloatSingle(session, nodeID, volumeParts[i].id,
-							HEU_Defines.DEFAULT_UNITY_HEIGHTFIELD_YPOS, out userYPos))
-						{
-							layer._position.y = userYPos;
-						}
+						volumeBuffer._heightRange = (layer._maxHeight - layer._minHeight);
 
 						// Look up TerrainData file path via attribute if user has set it
 						volumeBuffer._terrainDataPath = HEU_GeneralUtility.GetAttributeStringValueSingle(session, nodeID, volumeBuffer._id,
@@ -620,11 +601,7 @@ namespace HoudiniEngineUnity
 						volumeBuffer._splatMaps = null;
 					}
 
-					// TODO: revisit how the position is calculated
-					volumeBuffer._position = new Vector3(
-						volumeBuffer._terrainSizeX + volumeBuffer._splatLayers[0]._minBounds.x, 
-						volumeBuffer._splatLayers[0]._position.y, 
-						volumeBuffer._splatLayers[0]._minBounds.z);
+					volumeBuffer._position = new Vector3((volumeBuffer._terrainSizeX + volumeBuffer._splatLayers[0]._minBounds.x), volumeBuffer._splatLayers[0]._minHeight + volumeBuffer._splatLayers[0]._position.y, volumeBuffer._splatLayers[0]._minBounds.z);
 				}
 			}
 
@@ -901,7 +878,6 @@ namespace HoudiniEngineUnity
 			HAPI_AttributeInfo instanceAttrInfo = new HAPI_AttributeInfo();
 			HAPI_AttributeInfo unityInstanceAttrInfo = new HAPI_AttributeInfo();
 			HAPI_AttributeInfo instancePrefixAttrInfo = new HAPI_AttributeInfo();
-			
 
 			HEU_GeneralUtility.GetAttributeInfo(session, geoID, partID, instanceAttrName, ref instanceAttrInfo);
 			HEU_GeneralUtility.GetAttributeInfo(session, geoID, partID, unityInstanceAttrName, ref unityInstanceAttrInfo);
@@ -928,6 +904,7 @@ namespace HoudiniEngineUnity
 				// Attribute owner type determines whether to use single (detail) or multiple (point) asset(s) as source
 				if (unityInstanceAttrInfo.owner == HAPI_AttributeOwner.HAPI_ATTROWNER_POINT || unityInstanceAttrInfo.owner == HAPI_AttributeOwner.HAPI_ATTROWNER_DETAIL)
 				{
+
 					assetPaths = HEU_GeneralUtility.GetAttributeStringData(session, geoID, partID, unityInstanceAttrName, ref unityInstanceAttrInfo);
 				}
 				else
@@ -950,14 +927,6 @@ namespace HoudiniEngineUnity
 				instancerBuffer._instanceTransforms = instanceTransforms;
 				instancerBuffer._instancePrefixes = instancePrefixes;
 				instancerBuffer._assetPaths = assetPaths;
-
-				HAPI_AttributeInfo collisionGeoAttrInfo = new HAPI_AttributeInfo();
-				HEU_GeneralUtility.GetAttributeInfo(session, geoID, partID, HEU_Defines.DEFAULT_COLLISION_GEO, ref collisionGeoAttrInfo);
-				if (collisionGeoAttrInfo.owner == HAPI_AttributeOwner.HAPI_ATTROWNER_POINT
-					|| collisionGeoAttrInfo.owner == HAPI_AttributeOwner.HAPI_ATTROWNER_DETAIL)
-				{
-					instancerBuffer._collisionAssetPaths = HEU_GeneralUtility.GetAttributeStringData(session, geoID, partID, HEU_Defines.DEFAULT_COLLISION_GEO, ref collisionGeoAttrInfo);
-				}
 
 				return instancerBuffer;
 			}

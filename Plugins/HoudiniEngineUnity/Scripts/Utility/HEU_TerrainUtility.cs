@@ -80,10 +80,6 @@ namespace HoudiniEngineUnity
 				float terrainSizeX = Mathf.Round((volumeInfo.xLength - 1) * gridSpacingX);
 				float terrainSizeY = Mathf.Round((volumeInfo.yLength - 1) * gridSpacingY);
 
-				// Test size
-				//float terrainSizeX = Mathf.Round((volumeInfo.xLength) * gridSpacingX);
-				//float terrainSizeY = Mathf.Round((volumeInfo.yLength) * gridSpacingY);
-
 				//Debug.LogFormat("GS = {0},{1},{2}. SX = {1}. SY = {2}", gridSpacingX, gridSpacingY, terrainSizeX, terrainSizeY);
 
 				//Debug.LogFormat("HeightField Pos:{0}, Scale:{1}", position, scale.ToString("{0.00}"));
@@ -109,9 +105,7 @@ namespace HoudiniEngineUnity
 					bNewTerrain = true;
 				}
 
-#if !HEU_TERRAIN_COLLIDER_DISABLED
 				TerrainCollider collider = HEU_GeneralUtility.GetOrCreateComponent<TerrainCollider>(gameObject);
-#endif
 
 				// Look up terrain material, if specified, on the height layer
 				string specifiedTerrainMaterialName = HEU_GeneralUtility.GetMaterialAttributeValueFromPart(session,
@@ -131,10 +125,7 @@ namespace HoudiniEngineUnity
 				}
 
 				terrainData = terrain.terrainData;
-
-#if !HEU_TERRAIN_COLLIDER_DISABLED
 				collider.terrainData = terrainData;
-#endif
 
 				if (bNewTerrain)
 				{
@@ -168,11 +159,8 @@ namespace HoudiniEngineUnity
 				float minHeight = 0;
 				float maxHeight = 0;
 				float heightRange = 0;
-				bool bUseHeightRangeOverride = true;
-
 				float[] normalizedHeights = GetNormalizedHeightmapFromPartWithMinMax(session, geoID, partID, 
-					volumeInfo.xLength, volumeInfo.yLength, ref minHeight, ref maxHeight, ref heightRange, 
-					bUseHeightRangeOverride);
+					volumeInfo.xLength, volumeInfo.yLength, ref minHeight, ref maxHeight, ref heightRange);
 				float[,] unityHeights = ConvertHeightMapHoudiniToUnity(heightMapResolution, heightMapResolution, normalizedHeights);
 
 				// The terrainData.baseMapResolution is not set here, but rather left to whatever default Unity uses
@@ -216,20 +204,7 @@ namespace HoudiniEngineUnity
 				float offsetZ = (float)heightMapResolution / (float)mapHeight;
 				//Debug.LogFormat("offsetX: {0}, offsetZ: {1}", offsetX, offsetZ);
 
-				// Use y position from attribute if user has set it
-				float ypos = position.y + minHeight;
-				float userYPos;
-				if (HEU_GeneralUtility.GetAttributeFloatSingle(session, geoID, partID,
-					HEU_Defines.DEFAULT_UNITY_HEIGHTFIELD_YPOS, out userYPos))
-				{
-					ypos = userYPos;
-				}
-
-				// TODO: revisit how the position is calculated
-				volumePositionOffset = new Vector3((terrainSizeX + xmin) * offsetX, ypos, zmin * offsetZ);
-
-				// Test position
-				//volumePositionOffset = new Vector3(xcenter + mapWidth, ycenter, zcenter - mapHeight);
+				volumePositionOffset = new Vector3((terrainSizeX + xmin) * offsetX, minHeight + position.y, zmin * offsetZ);
 
 				return true;
 			}
@@ -281,7 +256,7 @@ namespace HoudiniEngineUnity
 		/// <param name="heightRange">Found height range in the heightmap.</param>
 		/// <returns>The converted heightmap from Houdini.</returns>
 		public static float[] GetNormalizedHeightmapFromPartWithMinMax(HEU_SessionBase session, HAPI_NodeId geoID, HAPI_PartId partID, 
-			int heightMapWidth, int heightMapHeight, ref float minHeight, ref float maxHeight, ref float heightRange, bool bUseHeightRangeOverride)
+			int heightMapWidth, int heightMapHeight, ref float minHeight, ref float maxHeight, ref float heightRange)
 		{
 			minHeight = float.MaxValue;
 			maxHeight = float.MinValue;
@@ -307,25 +282,11 @@ namespace HoudiniEngineUnity
 			}
 
 			heightRange = (maxHeight - minHeight);
-
-			// Use the override height range if user has set via attribute
-			bool bHeightRangeOverriden = false;
-			if (bUseHeightRangeOverride)
-			{
-				float userHeightRange = GetHeightRangeFromHeightfield(session, geoID, partID);
-				if (userHeightRange > 0)
-				{
-					heightRange = userHeightRange;
-					bHeightRangeOverriden = true;
-				}
-			}
-
 			if (heightRange == 0f)
 			{
 				// Always use a non-zero height range, otherwise user can't paint height on Terrain.
 				heightRange = 1f;
 			}
-
 			//Debug.LogFormat("{0} : {1}", HEU_SessionManager.GetString(volumeInfo.nameSH, session), heightRange);
 
 			const int UNITY_MAX_HEIGHT_RANGE = 65536;
@@ -369,13 +330,7 @@ namespace HoudiniEngineUnity
 						int ay = x - paddingLeft;
 						int ax = y - paddingTop;
 
-						float f = heightValues[ay + ax * volumeXLength];
-
-						if (!bHeightRangeOverriden)
-						{
-							f -= normalizeMinHeight;
-						}
-
+						float f = heightValues[ay + ax * volumeXLength] - normalizeMinHeight;
 						f *= inverseHeightRange;
 
 						// Flip for right-hand to left-handed coordinate system
@@ -1197,28 +1152,6 @@ namespace HoudiniEngineUnity
 				}
 			}
 			return layerType;
-		}
-
-		public static float GetHeightRangeFromHeightfield(HEU_SessionBase session, HAPI_NodeId geoID, HAPI_PartId partID)
-		{
-			float heightRange = 0f;
-			HEU_GeneralUtility.GetAttributeFloatSingle(session, geoID, partID,
-				HEU_Defines.DEFAULT_UNITY_HEIGHTFIELD_HEIGHT_RANGE, out heightRange);
-			return heightRange;
-		}
-
-		public static string GetTerrainDataExportPathFromHeightfieldAttribute(HEU_SessionBase session, HAPI_NodeId geoID, 
-			HAPI_PartId partID)
-		{
-			HAPI_AttributeInfo attrInfo = new HAPI_AttributeInfo();
-			string[] attrValue = HEU_GeneralUtility.GetAttributeStringData(session, geoID, partID, 
-				HEU_Defines.DEFAULT_UNITY_HEIGHTFIELD_TERRAINDATA_EXPORT_PATH,
-				ref attrInfo);
-			if (attrInfo.exists && attrValue.Length > 0 && string.IsNullOrEmpty(attrValue[0]))
-			{
-				return attrValue[0];
-			}
-			return "";
 		}
 	}
 

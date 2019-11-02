@@ -6,10 +6,17 @@
     "description": "Houdini Engine plugin for Unity. Visit sidefx.com/unity",
     "keywords": [
         "houdini",
-        "unity"
+        "unity",
+        "procedural",
+        "mesh",
+        "sidefx"
     ],
     "category": "Unity",
     "dependencies" : {
     	
-    }
+    },
+    "repository": {
+    "type": "git",
+    "url": "https://github.com/SeelanV/HoudiniEngineForUnity"
+  }
 }
