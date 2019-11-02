@@ -1,0 +1,15 @@
+{
+    "name": "com.sidefx.houdiniengineunity",
+    "displayName": "Houdini Engine for Unity",
+    "version": "17.5.288",
+    "unity": "2018.1",
+    "description": "Houdini Engine plugin for Unity. Visit sidefx.com/unity",
+    "keywords": [
+        "houdini",
+        "unity"
+    ],
+    "category": "Unity",
+    "dependencies" : {
+    	
+    }
+}
